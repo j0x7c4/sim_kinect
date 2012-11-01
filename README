@@ -1,0 +1,15 @@
+Configuration:
+modify #define XML_CONFIG "E:/source/hands-tracker/sim_kinect/config.xml" in SimpleKinect.h into the path of config.xml file.
+Usage:
+set environment of OpenCV 2.3+ and OpenNI 1.5+
+include "SimpleKinect.h"
+	Create a instance of SimKinect:
+		SimKinect sensor;
+	Initlization:
+		sensor.init(); 
+		if you want to read the data from .oni, initlization is like below:
+			sensor.init(file_path); // filepath is the path of .oni
+			
+Author:
+Jie Fu
+Email:china.eli@gmail.com
