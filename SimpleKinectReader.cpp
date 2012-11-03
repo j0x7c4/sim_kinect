@@ -730,13 +730,33 @@ void SimKinect::StartRecord(char* save_name) {
 	nRetVal = recorder.SetDestination(XN_RECORD_MEDIUM_FILE, save_name);
 	CHECK_RC(nRetVal, "Set recorder destination file");
 
+	if ( depth_generator.IsValid() ) {
 	// add depth node to recorder
-	nRetVal = recorder.AddNodeToRecording(depth_generator);
-	CHECK_RC(nRetVal, "Add depth node to recording");
-
-	// add depth node to recorder
-	nRetVal = recorder.AddNodeToRecording(color_generator);
-	CHECK_RC(nRetVal, "Add depth node to recording");
+		nRetVal = recorder.AddNodeToRecording(depth_generator);
+		CHECK_RC(nRetVal, "Add depth node to recording");
+	}
+	if ( color_generator.IsValid() ) {
+	// add color node to recorder
+		nRetVal = recorder.AddNodeToRecording(color_generator);
+		CHECK_RC(nRetVal, "Add color node to recording");
+	}
+	/*
+	if ( user_generator.IsValid() ) {
+	// add user node to recorder
+		nRetVal = recorder.AddNodeToRecording(user_generator);
+		CHECK_RC(nRetVal, "Add user node to recording");
+	}
+	*/
+	if ( ir_generator.IsValid() ) {
+		// add ir node to recorder
+		nRetVal = recorder.AddNodeToRecording(ir_generator);
+		CHECK_RC(nRetVal, "Add ir node to recording");
+	}
+	if ( audio_generator.IsValid() ) {
+		// add audio node to recorder
+		nRetVal = recorder.AddNodeToRecording(audio_generator);
+		CHECK_RC(nRetVal, "Add audio node to recording");
+	}
 }
 
 void SimKinect::StopRecord() {
