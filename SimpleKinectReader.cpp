@@ -317,11 +317,11 @@ XnStatus SimKinect::Init() {
 		return (nRetVal);
 	}
 	if ( bIsDepthOn ) {
-		depth_frame = new unsigned char[640*480*3];
-		depth_map = new int[640*480];
+		depth_frame = new unsigned char[video_size_width*video_size_height*3];
+		depth_map = new int[video_size_width*video_size_height];
 	}
 	if ( bIsImageOn ) {
-		color_frame = new unsigned char[640*480*3];
+		color_frame = new unsigned char[video_size_width*video_size_height*3];
 	}
 	
 	XnCallbackHandle hUserCallbacks, hCalibrationStart, hCalibrationComplete, hPoseDetected, hCalibrationInProgress, hPoseInProgress;
@@ -377,7 +377,7 @@ void SimKinect::DrawRGBMap(const xn::ImageMetaData& imd) {
 	static int height;
 	static int width_step;
 	static XnRGB24Pixel* g_pTexMap;
-	//static Mat color_img(cvSize(640,480),CV_MAKETYPE(8,3));
+
 	if(!bInitialized) {
 		width = video_size_width;
 		height = video_size_height;
