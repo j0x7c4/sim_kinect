@@ -19,12 +19,12 @@ int main ( ) {
 	char buffer[100];
 	//Create a SimKinect instance
 	SimKinect sensor;
-	if ( ret = sensor.Init(file_path ) ) {
+	if ( ret = sensor.Init( ) ) {
 		printf("Failed to initialize: %d\n",ret);
 		exit(1);
 	}
 	//Record the data
-	//sensor.StartRecord("sample.oni");
+	sensor.StartRecord("sample.oni");
 	//SimKinect sensor(file_path);
 	//Craete data buffer
 	color_data = new unsigned char[640*480*3];
@@ -62,5 +62,5 @@ int main ( ) {
 
 	}
 	//Stop record before exit
-	//sensor.StopRecord();
+	sensor.StopRecord();
 }
