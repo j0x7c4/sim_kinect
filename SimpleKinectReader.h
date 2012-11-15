@@ -162,9 +162,8 @@ private:
 	void DrawDepthMap(const DepthMetaData& dmd);
 public:
 	SimKinect();
-	SimKinect(char* filename);
 	XnStatus Init();
-	XnStatus Init(char* filename);
+	XnStatus Init(const char* filename);
 	XnStatus Uninit();
 	void StartRecord(char* save_name);
 	void StopRecord();

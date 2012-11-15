@@ -180,9 +180,7 @@ SimKinect::SimKinect ( ) {
 	LoadArgs();
 	record_file = NULL;
 }
-SimKinect::SimKinect (char* filename) {
-	LoadArgs();
-}
+
 XnStatus SimKinect::Uninit() {
 	color_generator.Release();
 	depth_generator.Release();
@@ -197,7 +195,7 @@ XnStatus SimKinect::Uninit() {
 	}
 	return 0;
 }
-XnStatus SimKinect::Init(char* filename) {
+XnStatus SimKinect::Init(const char* filename) {
 	record_file = new char[255];
 	strcpy(record_file,filename);
 	xnSetPlayerRepeat(player,FALSE);
@@ -269,7 +267,7 @@ void SimKinect::OpenCommon()
 			}
 		}
 	}
-
+	
 	XnCallbackHandle hDummy;
 	context.RegisterToErrorStateChange(onErrorStateChanged, NULL, hDummy);
 
@@ -788,7 +786,7 @@ void SimKinect::GetJoint( XnUserID player, XnSkeletonJoint eJoint , SKPoint3D& r
 	pjoint.y = pt.Y;
 }
 void SimKinect::GetUsers(vector<SKUser>& users ) {
-
+	users.clear();
 	if ( !user_generator.IsValid() ) return ;
 
 	XnUserID aUsers[15];
