@@ -1,5 +1,5 @@
 #include "SimpleKinectReader.h"
-#include "cv.h"
+#include <opencv2\opencv.hpp>
 
 XnFloat Colors[][3] =
 {
@@ -19,6 +19,10 @@ XnFloat Colors[][3] =
 XnChar* SimKinect::strPose = "Psi";
 XnBool SimKinect::bNeedPose = FALSE;
 xn::UserGenerator SimKinect::user_generator;
+void DrawUser ( const SKUser& user , cv::Mat& image);
+int ReadUsers ( char* file_name, queue<vector<SKUser>> & users, queue<int>& frame_ids );
+void WriteUsersByFrame ( FILE* f , int frame_id, const vector<SKUser>& users );
+
 int CHECK_RC(int nRetVal, char* what) {
   if (nRetVal != XN_STATUS_OK) {																
     cout<<what<<" failed: "<<xnGetStatusString(nRetVal)<<endl;
@@ -156,19 +160,19 @@ void  SimKinect::LoadCalibration() {
     break;
   }
 }
-void SimKinect::LoadArgs () {
-
+void SimKinect::LoadArgs ( int width, int height) {
+	skeleton_data_file = NULL;
 	strDepthImageTitle = "depth";
 	strRGBImageTitle = "RGB";
-	video_size_width = 640;
-	video_size_height = 480;
+	video_size_width = width;
+	video_size_height = height;
 	bDrawUserColor = FALSE;
 	bDrawBackground = TRUE;
 	bDrawPixels = TRUE;
 	bDrawSkeleton = FALSE;
 	bPrintID = FALSE;
 	bPrintState = FALSE;
-	
+	frame_counter = 0;
 	bPause = false;
 	bRecord = false;
 	bQuit = false;
@@ -176,11 +180,10 @@ void SimKinect::LoadArgs () {
 SimKinect::~SimKinect () {
 	Uninit();
 }
-SimKinect::SimKinect ( ) {
-	LoadArgs();
+SimKinect::SimKinect ( int width, int height ) {
+	LoadArgs(width,height);
 	record_file = NULL;
 }
-
 XnStatus SimKinect::Uninit() {
 	color_generator.Release();
 	depth_generator.Release();
@@ -195,11 +198,9 @@ XnStatus SimKinect::Uninit() {
 	}
 	return 0;
 }
-XnStatus SimKinect::Init(const char* filename) {
-	record_file = new char[255];
-	strcpy(record_file,filename);
-	xnSetPlayerRepeat(player,FALSE);
-	Init();
+
+XnStatus SimKinect::Init() {
+	Init(0);
 	return 0;
 }
 void setErrorState(const char* strMessage)
@@ -279,6 +280,7 @@ XnStatus SimKinect::OpenDevice(const char* csXmlFile, EnumerationErrors& errors)
 	{
 		nRetVal = context.Init();
 		CHECK_RC(nRetVal, "Init");
+		xnSetPlayerRepeat(player,0);
 		nRetVal = context.OpenFileRecording(record_file,player);
 		if (nRetVal != XN_STATUS_OK)
 		{
@@ -296,10 +298,18 @@ XnStatus SimKinect::OpenDevice(const char* csXmlFile, EnumerationErrors& errors)
 	return (XN_STATUS_OK);
 }
 
-XnStatus SimKinect::Init() {
+XnStatus SimKinect::Init(const char* filename) {
 	XnStatus nRetVal = XN_STATUS_OK;
 	xn::EnumerationErrors errors;
-	
+	if ( filename ) { //read data from files
+		record_file = new char[255];
+		strcpy(record_file,filename);
+		xnSetPlayerRepeat(player,FALSE);
+		char skeleton_data_file_name[1024];
+		sprintf(skeleton_data_file_name,"%s.txt",filename);
+		ReadUsers(skeleton_data_file_name,users,frame_ids);
+	}
+
 	nRetVal = OpenDevice(XML_CONFIG, errors);
 	
 	if (nRetVal == XN_STATUS_NO_NODE_PRESENT)
@@ -326,8 +336,12 @@ XnStatus SimKinect::Init() {
 	if (!user_generator.IsCapabilitySupported(XN_CAPABILITY_SKELETON))
 	{
 		printf("Supplied user generator doesn't support skeleton\n");
-		return 1;
+		if ( record_file )
+			return 0;
+		else 
+			return 1;
 	}
+
 	nRetVal = user_generator.RegisterUserCallbacks(User_NewUser, User_LostUser, NULL, hUserCallbacks);
 	CHECK_RC(nRetVal, "Register to user callbacks");
 	nRetVal = user_generator.GetSkeletonCap().RegisterToCalibrationStart(UserCalibration_CalibrationStart, NULL, hCalibrationStart);
@@ -416,7 +430,7 @@ void SimKinect::DrawRGBMap(const xn::ImageMetaData& imd) {
 	//imshow("COLOR",color_img);
 	
 }
-void SimKinect::GetNextFrame(unsigned char* _color_frame, unsigned char* _depth_frame, int* _depth_map) {
+void SimKinect::GetNextFrame(unsigned char* _color_frame, unsigned char* _depth_frame, int* _depth_map, vector<SKUser>& _users) {
 	if (!bPause) {
 		// Read next available data
 		context.WaitAnyUpdateAll();
@@ -437,6 +451,17 @@ void SimKinect::GetNextFrame(unsigned char* _color_frame, unsigned char* _depth_
 			memcpy(_depth_frame,depth_frame,video_size_height*video_size_width*3*sizeof(unsigned char));
 			memcpy(_depth_map,depth_map,video_size_height*video_size_width*sizeof(int));
 		}
+		if ( record_file ) { //read data from record file
+			GetUsers(_users,frame_counter);
+		}
+		else if ( user_generator.IsValid() ) {
+			GetUsers(_users);
+			if ( skeleton_data_file ) {
+				WriteUsersByFrame(skeleton_data_file,frame_counter,_users);
+			}
+
+		}
+		frame_counter++;
 	}
 }
 void SimKinect::GetNextColorFrame(unsigned char* frame) {
@@ -738,13 +763,21 @@ void SimKinect::StartRecord(char* save_name) {
 		nRetVal = recorder.AddNodeToRecording(color_generator);
 		CHECK_RC(nRetVal, "Add color node to recording");
 	}
-	/*
+	
 	if ( user_generator.IsValid() ) {
+		char save_name_buf[1024];
+		sprintf(save_name_buf,"%s.txt",save_name);
+		if ( (skeleton_data_file = fopen(save_name_buf,"w")) ) {
+			printf("create skeleton file %s\n",save_name_buf);
+		}
+		else {
+			fprintf(stderr,"failed to create skeleton file %s\n",save_name_buf);
+		}
 	// add user node to recorder
-		nRetVal = recorder.AddNodeToRecording(user_generator);
-		CHECK_RC(nRetVal, "Add user node to recording");
+	//	nRetVal = recorder.AddNodeToRecording(user_generator);
+	//	CHECK_RC(nRetVal, "Add user node to recording");
 	}
-	*/
+	
 	if ( ir_generator.IsValid() ) {
 		// add ir node to recorder
 		nRetVal = recorder.AddNodeToRecording(ir_generator);
@@ -758,6 +791,10 @@ void SimKinect::StartRecord(char* save_name) {
 }
 
 void SimKinect::StopRecord() {
+	if ( skeleton_data_file ) {
+		fprintf(skeleton_data_file,"-1\n");
+		fclose(skeleton_data_file);
+	}
 	recorder.Release();
 }
 
@@ -784,6 +821,20 @@ void SimKinect::GetJoint( XnUserID player, XnSkeletonJoint eJoint , SKPoint3D& r
 	depth_generator.ConvertRealWorldToProjective(1, &pt, &pt);
 	pjoint.x = pt.X;
 	pjoint.y = pt.Y;
+}
+void SimKinect::GetUsers(vector<SKUser>& users, int frame_id) {
+	int head_frame_id;
+	if ( !this->frame_ids.empty() ) {
+		head_frame_id = this->frame_ids.front();
+		if ( head_frame_id!=frame_id-150 ) {
+			users.clear();
+		}
+		else {
+			users = this->users.front();
+			this->users.pop();
+			this->frame_ids.pop();
+		}	
+	}
 }
 void SimKinect::GetUsers(vector<SKUser>& users ) {
 	users.clear();
@@ -833,7 +884,7 @@ void SimKinect::GetUsers(vector<SKUser>& users ) {
 		GetJoint(aUsers[i],XN_SKEL_RIGHT_KNEE,user.real_joints[22],user.proj_joints[22]);
 		GetJoint(aUsers[i],XN_SKEL_RIGHT_ANKLE,user.real_joints[23],user.proj_joints[23]);
 		GetJoint(aUsers[i],XN_SKEL_RIGHT_FOOT,user.real_joints[24],user.proj_joints[24]);
-
+		
 		users.push_back(user);
 	}
 }
@@ -844,8 +895,58 @@ void DrawUser ( const SKUser& user , cv::Mat& image) {
 		sprintf(strLabel, "User %d", user.userId);
 		cv::putText(image,strLabel,cvPoint(user.proj_joints[0].x,user.proj_joints[0].y),CV_FONT_HERSHEY_SIMPLEX,1,CV_RGB(255,255,255),2);
     
-		
+		cv::line(image,cvPoint(user.proj_joints[SK_SKEL_LEFT_SHOULDER].x,user.proj_joints[SK_SKEL_LEFT_SHOULDER].y),
+									 cvPoint(user.proj_joints[SK_SKEL_RIGHT_SHOULDER].x,user.proj_joints[SK_SKEL_RIGHT_SHOULDER].y),CV_RGB(0,0,255));
+		cv::line(image,cvPoint(user.proj_joints[SK_SKEL_LEFT_SHOULDER].x,user.proj_joints[SK_SKEL_LEFT_SHOULDER].y),
+									 cvPoint(user.proj_joints[SK_SKEL_LEFT_ELBOW].x,user.proj_joints[SK_SKEL_LEFT_ELBOW].y),CV_RGB(0,0,255));
+		cv::line(image,cvPoint(user.proj_joints[SK_SKEL_LEFT_ELBOW].x,user.proj_joints[SK_SKEL_LEFT_ELBOW].y),
+									 cvPoint(user.proj_joints[SK_SKEL_LEFT_HAND].x,user.proj_joints[SK_SKEL_LEFT_HAND].y),CV_RGB(0,0,255));
+		cv::line(image,cvPoint(user.proj_joints[SK_SKEL_RIGHT_SHOULDER].x,user.proj_joints[SK_SKEL_RIGHT_SHOULDER].y),
+									 cvPoint(user.proj_joints[SK_SKEL_RIGHT_ELBOW].x,user.proj_joints[SK_SKEL_RIGHT_ELBOW].y),CV_RGB(0,0,255));
+		cv::line(image,cvPoint(user.proj_joints[SK_SKEL_RIGHT_ELBOW].x,user.proj_joints[SK_SKEL_RIGHT_ELBOW].y),
+									 cvPoint(user.proj_joints[SK_SKEL_RIGHT_HAND].x,user.proj_joints[SK_SKEL_RIGHT_HAND].y),CV_RGB(0,0,255));
 		for ( int i=1 ; i<SK_JOINT_NUMBER; i++ ){
 			cv::circle(image,cvPoint(user.proj_joints[i].x,user.proj_joints[i].y),1,CV_RGB(0,0,255));
 		}
+}
+
+int ReadUsers ( char* file_name, queue<vector<SKUser>> & users, queue<int>& frame_ids ) {
+	FILE* f = fopen(file_name,"r");
+	if ( !f ) {
+		fprintf(stderr,"can't open %s\n",file_name);
+		return 0;
+	}
+	int user_id,frame_id_former=-1,frame_id_now=-1;
+	vector<SKUser> users_in_frame;
+	users_in_frame.clear();
+	while ( fscanf(f,"%d",&frame_id_now)!=EOF ) {
+		SKUser user;
+		if ( frame_id_now != frame_id_former && users_in_frame.size()>0 ) {
+			users.push(users_in_frame);
+			frame_ids.push(frame_id_former);
+			users_in_frame.clear();
+		}
+		if ( frame_id_now < 0 ) break;
+		fscanf(f,"%d",&user_id);
+		user.userId = user_id;
+		for ( int i=0 ; i<SK_JOINT_NUMBER; i++ ) {
+			fscanf(f,"%f %f %f %d %d",&user.real_joints[i].x,&user.real_joints[i].y,&user.real_joints[i].z,
+														 &user.proj_joints[i].x,&user.proj_joints[i].y);
+		}
+		users_in_frame.push_back(user);
+		frame_id_former = frame_id_now;
+	}
+	fclose(f);
+	return 1;
+}
+
+void WriteUsersByFrame(FILE* skeleton_data_file,int frame_counter,const vector<SKUser>& users_in_frame) {
+	for ( int i=0 ; i<users_in_frame.size() ; i++ )  {
+		fprintf(skeleton_data_file,"%d %d",frame_counter,users_in_frame[i].userId);
+		for ( int j = 0 ; j<SK_JOINT_NUMBER ; j++ ) {
+			fprintf(skeleton_data_file," %f %f %f %d %d",users_in_frame[i].real_joints[j].x,users_in_frame[i].real_joints[j].y,users_in_frame[i].real_joints[j].z,
+				users_in_frame[i].proj_joints[j].x,users_in_frame[i].proj_joints[j].y);
+		}
+		fprintf(skeleton_data_file,"\n");
+	}
 }

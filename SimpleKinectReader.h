@@ -14,17 +14,19 @@
 #include <iostream>
 #include <map>
 #include <vector>
-#include <cv.h>
+#include <queue>
+#include <opencv2\opencv.hpp>
 using namespace std;
 using namespace xn;
 #endif
 
 #define MAX_DEPTH 10000
 #define nColors 10
-#define XML_CONFIG "E:/source/hands-tracker/sim_kinect/config.xml"
+#define XML_CONFIG "E:/source/gestureRecognition/simpleKinect/config.xml"
 #define SK_JOINT_NUMBER 25
 
-
+#define DEFAULT_VIDEO_WIDTH 640
+#define DEFAULT_VIDEO_HEIGHT 480
 
 int CHECK_RC(int nRetVal, char* what);
 static UserGenerator user_generator;
@@ -111,7 +113,8 @@ private:
 	
 	float pDepthHist[MAX_DEPTH];
 	char* record_file;
-
+	queue<vector<SKUser>> users;
+	queue<int> frame_ids;
 	static XnBool bNeedPose;
 	XnBool bDrawUserColor;
 	XnBool bDrawBackground;
@@ -138,6 +141,8 @@ private:
 	unsigned char* depth_frame;
 	int* depth_map;
 
+	FILE* skeleton_data_file;
+	int frame_counter;
 	static void XN_CALLBACK_TYPE User_NewUser(UserGenerator& generator, XnUserID nId, void* pCookie);
 	static void XN_CALLBACK_TYPE User_LostUser(UserGenerator& generator, XnUserID nId, void* pCookie);
 	static void XN_CALLBACK_TYPE UserPose_PoseDetected(PoseDetectionCapability& capability, const XnChar* strPose, XnUserID nId, void* pCookie);
@@ -147,8 +152,10 @@ private:
 	void LoadCalibration();
 	XnStatus OpenDevice(const char* csXmlFile, EnumerationErrors & errors);
 	void OpenCommon();
-	void LoadArgs ( );
+	void LoadArgs (int width = DEFAULT_VIDEO_WIDTH,int height = DEFAULT_VIDEO_HEIGHT );
 	void GetJoint( XnUserID player, XnSkeletonJoint eJoint , SKPoint3D& rjoint, SKPoint2D& pjoint);
+	void GetUsers (vector<SKUser>& users);
+	void GetUsers(vector<SKUser>& users, int frame_id);
 	static void XN_CALLBACK_TYPE MyCalibrationInProgress(SkeletonCapability& capability, XnUserID id, XnCalibrationStatus calibrationError, void* pCookie)
 	{
 		m_Errors[id].first = calibrationError;
@@ -161,7 +168,7 @@ private:
 	void DrawDepthMapWithUsers(const DepthMetaData& dmd, const SceneMetaData& smd);
 	void DrawDepthMap(const DepthMetaData& dmd);
 public:
-	SimKinect();
+	SimKinect(int video_width = DEFAULT_VIDEO_WIDTH, int video_height = DEFAULT_VIDEO_HEIGHT);
 	XnStatus Init();
 	XnStatus Init(const char* filename);
 	XnStatus Uninit();
@@ -169,8 +176,8 @@ public:
 	void StopRecord();
 	void GetNextColorFrame(unsigned char* color_frame);
 	void GetNextDepthFrame(unsigned char* depth_frame, int* depth_map);
-	void GetNextFrame(unsigned char* color_frame, unsigned char* depth_frame, int* depth_map);
-	void GetUsers (vector<SKUser>& users);
+	void GetNextFrame(unsigned char* color_frame, unsigned char* depth_frame, int* depth_map,vector<SKUser>& _users=vector<SKUser>());
+	
 	
 	~SimKinect();
 };
